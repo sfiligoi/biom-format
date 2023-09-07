@@ -170,15 +170,15 @@ cdef _subsample_fast(cnp.ndarray[cnp.float64_t, ndim=1] data,
         start, end = indptr[i], indptr[i+1]
         length = end - start
 
-        idata = data[start:end].astype(cnp.int64_t)
+        idata = data[start:end].astype(np.int64)
         counts_sum = idata.sum()
 
-        ! TODO: This could potentially be relaxed
+        # TODO: This could potentially be relaxed
         if counts_sum < n:
             data[start:end] = 0
             continue
 
-        rems = cnp.empty(length, cnp.int32_t)
+        rems = np.empty(length, np.int32)
         int_counts_sum = 0
         rels = 0
         for j in range(length):
@@ -187,11 +187,11 @@ cdef _subsample_fast(cnp.ndarray[cnp.float64_t, ndim=1] data,
             el = n*el
             elrem = el % counts_sum
             if elrem>0:
-              ! preserve which index had a mon-zero reminder
+              # preserve which index had a mon-zero reminder
               rems[rels] = j
               rels += 1
             # keep only the integer part of the proportional val
-            eldiv = el / counts_sum
+            eldiv = el // counts_sum
             idata[j] = eldiv
             int_counts_sum += eldiv
 
@@ -204,7 +204,7 @@ cdef _subsample_fast(cnp.ndarray[cnp.float64_t, ndim=1] data,
             # we always increase by at most one
             rems.resize(rels)
             rng.shuffle(rems)
-            for j in length(int_counts_diff):
+            for j in range(int_counts_diff):
                 idata[rems[j]] += 1
 
         data[start:end] = idata
