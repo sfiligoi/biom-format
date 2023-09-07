@@ -133,7 +133,84 @@ cdef _subsample_without_replacement(cnp.ndarray[cnp.float64_t, ndim=1] data,
         data[start+el+1:end] = 0.0
 
 
-def _subsample(arr, n, with_replacement, rng):
+cdef _subsample_fast(cnp.ndarray[cnp.float64_t, ndim=1] data,
+                     cnp.ndarray[cnp.int32_t, ndim=1] indptr,
+                     cnp.int64_t n,
+                     object rng):
+    """Subsample non-zero values of a sparse array using an approximate method.
+
+    Parameters
+    ----------
+    data : {csr_matrix, csc_matrix}.data
+        A 1xM sparse vector data
+    indptr : {csr_matrix, csc_matrix}.indptr
+        A 1xM sparse vector indptr
+    n : int
+        Number of items to subsample from `arr`
+    rng : Generator instance
+        A random generator. This will likely be an instance returned 
+        by np.random.default_rng
+
+    Returns
+    -------
+    ndarray
+        Subsampled data
+
+    """
+    cdef:
+        cnp.int64_t counts_sum, int_counts_sum
+        cnp.int32_t int_counts_diff
+        cnp.int32_t start,end,length,j
+        Py_ssize_t i
+        cnp.int64_t el, eldiv, elrem
+        cnp.ndarray[cnp.int64_t, ndim=1] idata
+        cnp.ndarray[cnp.int32_t, ndim=1] rems
+
+    for i in range(indptr.shape[0] - 1):
+        start, end = indptr[i], indptr[i+1]
+        length = end - start
+
+        idata = data[start:end].astype(cnp.int64_t)
+        counts_sum = idata.sum()
+
+        ! TODO: This could potentially be relaxed
+        if counts_sum < n:
+            data[start:end] = 0
+            continue
+
+        rems = cnp.empty(length, cnp.int32_t)
+        int_counts_sum = 0
+        rels = 0
+        for j in range(length):
+            el = idata[j]
+            # compute the remainders of proportional vals
+            el = n*el
+            elrem = el % counts_sum
+            if elrem>0:
+              ! preserve which index had a mon-zero reminder
+              rems[rels] = j
+              rels += 1
+            # keep only the integer part of the proportional val
+            eldiv = el / counts_sum
+            idata[j] = eldiv
+            int_counts_sum += eldiv
+
+        # see how much off we are
+        # since it is based on indexes, it will be 32-bit
+        int_counts_diff = counts_sum-int_counts_sum
+        if int_counts_diff>0:
+            # randomly pick from the reminders
+            # do not care how much the remainder was
+            # we always increase by at most one
+            rems.resize(rels)
+            rng.shuffle(rems)
+            for j in length(int_counts_diff):
+                idata[rems[j]] += 1
+
+        data[start:end] = idata
+        
+
+def _subsample(arr, n, with_replacement, rng, true_subsample):
     """Subsample non-zero values of a sparse array
 
     Parameters
@@ -147,6 +224,10 @@ def _subsample(arr, n, with_replacement, rng):
     rng : Generator instance
         A random generator. This will likely be an instance returned 
         by np.random.default_rng
+    true_subsample : bool
+        If `True`, use traditional subsampling. If `False`,
+        use a faster approximate method.
+        Ignored` if `with_replacement` is `True`.
 
     Returns
     -------
@@ -160,5 +241,8 @@ def _subsample(arr, n, with_replacement, rng):
     """
     if (with_replacement):
        return _subsample_with_replacement(arr.data, arr.indptr, n, rng)
-    else:
+    elif (true_subsample):
        return _subsample_without_replacement(arr.data, arr.indptr, n, rng)
+    else:
+       return _subsample_fast(arr.data, arr.indptr, n, rng)
+

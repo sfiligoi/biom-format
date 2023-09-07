@@ -2898,7 +2898,7 @@ class Table:
         return max_val
 
     def subsample(self, n, axis='sample', by_id=False, with_replacement=False,
-                  seed=None):
+                  seed=None, true_subsample=True):
         """Randomly subsample without replacement.
 
         Parameters
@@ -2918,6 +2918,10 @@ class Table:
             Should not be `True` if `by_id` is `True`.
         seed : int, optional
             If provided, set the numpy random seed with this value
+        true_subsample : boolean, optional
+            If `True` (default), use traditional subsampling. If `False`,
+            use a faster approximate method.
+            Ignored` if `with_replacement` is `True`.
 
         Returns
         -------
@@ -2987,7 +2991,7 @@ class Table:
             table.filter(lambda v, i, md: i in subset, axis=axis)
         else:
             data = table._get_sparse_data()
-            _subsample(data, n, with_replacement, rng)
+            _subsample(data, n, with_replacement, rng, true_subsample)
             table._data = data
 
             table.filter(lambda v, i, md: v.sum() > 0, axis=axis)
