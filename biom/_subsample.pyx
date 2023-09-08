@@ -24,7 +24,7 @@ cdef _subsample_with_replacement(cnp.ndarray[cnp.float64_t, ndim=1] data,
     n : int
         Number of items to subsample from `arr`
     rng : Generator instance
-        A random generator. This will likely be an instance returned 
+        A random generator. This will likely be an instance returned
         by np.random.default_rng
 
     Returns
@@ -67,7 +67,7 @@ cdef _subsample_without_replacement(cnp.ndarray[cnp.float64_t, ndim=1] data,
     n : int
         Number of items to subsample from `arr`
     rng : Generator instance
-        A random generator. This will likely be an instance returned 
+        A random generator. This will likely be an instance returned
         by np.random.default_rng
 
     Returns
@@ -108,7 +108,7 @@ cdef _subsample_without_replacement(cnp.ndarray[cnp.float64_t, ndim=1] data,
         # 
         # specifically, what we're going to do here is randomly pick what elements within
         # each sample to keep. this is analogous issuing the prior np.repeat call, and obtaining
-        # a random set of index positions for that resulting array. however, we do not need to 
+        # a random set of index positions for that resulting array. however, we do not need to
         # perform the np.repeat call as we know the length of that resulting vector already,
         # and additionally, we can compute the sample associated with an index in that array
         # without constructing it.
@@ -133,10 +133,10 @@ cdef _subsample_without_replacement(cnp.ndarray[cnp.float64_t, ndim=1] data,
         data[start+el+1:end] = 0.0
 
 
-cdef _subsample_fast(cnp.ndarray[cnp.float64_t, ndim=1] data,
-                     cnp.ndarray[cnp.int32_t, ndim=1] indptr,
-                     cnp.int64_t n,
-                     object rng):
+cdef _subsample_fast_t1(cnp.ndarray[cnp.float64_t, ndim=1] data,
+                        cnp.ndarray[cnp.int32_t, ndim=1] indptr,
+                        cnp.int64_t n,
+                        object rng):
     """Subsample non-zero values of a sparse array using an approximate method.
 
     Parameters
@@ -148,7 +148,7 @@ cdef _subsample_fast(cnp.ndarray[cnp.float64_t, ndim=1] data,
     n : int
         Number of items to subsample from `arr`
     rng : Generator instance
-        A random generator. This will likely be an instance returned 
+        A random generator. This will likely be an instance returned
         by np.random.default_rng
 
     Returns
@@ -208,7 +208,66 @@ cdef _subsample_fast(cnp.ndarray[cnp.float64_t, ndim=1] data,
                 idata[rems[j]] += 1
 
         data[start:end] = idata
-        
+
+
+cdef _subsample_fast(cnp.ndarray[cnp.float64_t, ndim=1] data,
+                     cnp.ndarray[cnp.int32_t, ndim=1] indptr,
+                     cnp.int64_t n,
+                     object rng):
+    """Subsample non-zero values of a sparse array using an approximate method.
+
+    Parameters
+    ----------
+    data : {csr_matrix, csc_matrix}.data
+        A 1xM sparse vector data
+    indptr : {csr_matrix, csc_matrix}.indptr
+        A 1xM sparse vector indptr
+    n : int
+        Number of items to subsample from `arr`
+    rng : Generator instance
+        A random generator. This will likely be an instance returned
+        by np.random.default_rng
+
+    Returns
+    -------
+    ndarray
+        Subsampled data
+
+    """
+    cdef:
+        cnp.int64_t counts_sum, int_counts_sum
+        cnp.int64_t int_counts_diff
+        cnp.int32_t start,end,length
+        Py_ssize_t i
+        cnp.ndarray[cnp.int64_t, ndim=1] idata
+        cnp.ndarray[cnp.int64_t, ndim=1] rems
+        cnp.ndarray[cnp.float632_t, ndim=1] pvals
+
+    for i in range(indptr.shape[0] - 1):
+        start, end = indptr[i], indptr[i+1]
+        length = end - start
+
+        idata = data[start:end].astype(np.int64)
+        counts_sum = idata.sum()
+
+        # TODO: This could potentially be relaxed
+        if counts_sum < n:
+            data[start:end] = 0
+            continue
+
+        # get get int truncation of the fraction as the baseline
+        data[start:end] = (n*idata) // counts_sum
+        int_counts_sum = data[start:end].sum()
+
+        # see how much off we are
+        int_counts_diff = n-int_counts_sum
+        if (int_counts_diff>0):
+            # randomly pick elements from the remainders
+            rems = (n*idata) % counts_sum
+            rems_sum = rems.sum()
+            pvals = rems.astype(np.float32) / rems_sum
+            data[start:end] += rng.multinomial(int_counts_sum, pvals)
+
 
 def _subsample(arr, n, with_replacement, rng, true_subsample):
     """Subsample non-zero values of a sparse array
