@@ -241,7 +241,7 @@ cdef _subsample_fast(cnp.ndarray[cnp.float64_t, ndim=1] data,
         Py_ssize_t i
         cnp.ndarray[cnp.int64_t, ndim=1] idata
         cnp.ndarray[cnp.int64_t, ndim=1] rems
-        cnp.ndarray[cnp.float632_t, ndim=1] pvals
+        cnp.ndarray[cnp.float64_t, ndim=1] pvals
 
     for i in range(indptr.shape[0] - 1):
         start, end = indptr[i], indptr[i+1]
@@ -265,8 +265,8 @@ cdef _subsample_fast(cnp.ndarray[cnp.float64_t, ndim=1] data,
             # randomly pick elements from the remainders
             rems = (n*idata) % counts_sum
             rems_sum = rems.sum()
-            pvals = rems.astype(np.float32) / rems_sum
-            data[start:end] += rng.multinomial(int_counts_sum, pvals)
+            pvals = rems / rems_sum
+            data[start:end] += rng.multinomial(int_counts_diff, pvals)
 
 
 def _subsample(arr, n, with_replacement, rng, true_subsample):
