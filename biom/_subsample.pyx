@@ -197,20 +197,15 @@ cdef _subsample_fast(cnp.ndarray[cnp.float64_t, ndim=1] data,
 
         # see how much off we are
         # since it is based on indexes, it will be 32-bit
-        int_counts_diff = counts_sum-int_counts_sum
+        int_counts_diff = n-int_counts_sum
         if int_counts_diff>0:
-            if (rels>int_counts_diff):
-                # randomly pick from the reminders
-                # do not care how much the remainder was
-                # we always increase by at most one
-                rems.resize(rels)
-                rng.shuffle(rems)
-                for j in range(int_counts_diff):
-                    idata[rems[j]] += 1
-            else:
-                # the elements are too uniformly distributed
-                # just randomly pick among them using the multinomial
-                idata = rng.multinomial(n, data[start:end] / counts_sum)
+            # randomly pick from the reminders
+            # do not care how much the remainder was
+            # we always increase by at most one
+            rems.resize(rels,refcheck=False)
+            rng.shuffle(rems)
+            for j in range(int_counts_diff):
+                idata[rems[j]] += 1
 
         data[start:end] = idata
         
