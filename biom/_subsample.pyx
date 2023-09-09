@@ -133,10 +133,10 @@ cdef _subsample_without_replacement(cnp.ndarray[cnp.float64_t, ndim=1] data,
         data[start+el+1:end] = 0.0
 
 
-cdef _subsample_fast_t1(cnp.ndarray[cnp.float64_t, ndim=1] data,
-                        cnp.ndarray[cnp.int32_t, ndim=1] indptr,
-                        cnp.int64_t n,
-                        object rng):
+cdef _subsample_fast(cnp.ndarray[cnp.float64_t, ndim=1] data,
+                     cnp.ndarray[cnp.int32_t, ndim=1] indptr,
+                     cnp.int64_t n,
+                     object rng):
     """Subsample non-zero values of a sparse array using an approximate method.
 
     Parameters
@@ -210,11 +210,12 @@ cdef _subsample_fast_t1(cnp.ndarray[cnp.float64_t, ndim=1] data,
         data[start:end] = idata
 
 
-cdef _subsample_fast(cnp.ndarray[cnp.float64_t, ndim=1] data,
-                     cnp.ndarray[cnp.int32_t, ndim=1] indptr,
-                     cnp.int64_t n,
-                     object rng):
-    """Subsample non-zero values of a sparse array using an approximate method.
+cdef _subsample_fast_wr(cnp.ndarray[cnp.float64_t, ndim=1] data,
+                        cnp.ndarray[cnp.int32_t, ndim=1] indptr,
+                        cnp.int64_t n,
+                        object rng):
+    """Subsample non-zero values of a sparse array using an approximate method
+       with replacement.
 
     Parameters
     ----------
