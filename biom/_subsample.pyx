@@ -52,6 +52,83 @@ cdef _subsample_with_replacement(cnp.ndarray[cnp.float64_t, ndim=1] data,
         data[start:end] = rng.multinomial(n, pvals)
 
 
+cdef _subsample_slice_without_replacement(cnp.ndarray[cnp.float64_t, ndim=1] data,
+                                          cnp.int32_t start,
+                                          cnp.int32_t end,
+                                          cnp.int64_t n,
+                                          object rng):
+    """Subsample a slice of an array w/out replacement
+
+    Parameters
+    ----------
+    data : ndarray
+        A 1xM vector data
+    start : int
+        Start of the array slice to consider
+    end : int
+        End of the array slice to consider
+    n : int
+        Number of items to subsample from `arr`
+    rng : Generator instance
+        A random generator. This will likely be an instance returned
+        by np.random.default_rng
+
+    Returns
+    -------
+    ndarray
+        Subsampled data in place
+    """
+    cdef:
+        cnp.int64_t counts_sum, count_el, perm_count_el
+        cnp.int64_t count_rem
+        cnp.ndarray[cnp.int64_t, ndim=1] permuted
+        Py_ssize_t idx
+        cnp.int32_t length,el
+
+    length = end - start
+    counts_sum = data[start:end].sum()
+        
+    if counts_sum < n:
+        data[start:end] = 0
+        return
+
+    permuted = rng.choice(counts_sum, n, replace=False, shuffle=False)
+    permuted.sort()
+
+    # now need to do reverse mapping
+    # since I am not using np.repeat anymore
+    # reminder, old logic was
+    #   r = np.arange(length)
+    #   unpacked = np.repeat(r, data_i[start:end])
+    #   permuted_unpacked = rng.choice(unpacked, n, replace=False, shuffle=False)
+    # 
+    # specifically, what we're going to do here is randomly pick what elements within
+    # each sample to keep. this is analogous issuing the prior np.repeat call, and obtaining
+    # a random set of index positions for that resulting array. however, we do not need to
+    # perform the np.repeat call as we know the length of that resulting vector already,
+    # and additionally, we can compute the sample associated with an index in that array
+    # without constructing it.
+
+    el = 0         # index in result/data
+    count_el = 0  # index in permutted
+    count_rem = long(data[start])  # since each data has multiple els, sub count there
+    data[start] = 0.0
+    for idx in range(n):
+        perm_count_el = permuted[idx]
+        # the array is sorted, so just jump ahead
+        while (perm_count_el - count_el) >= count_rem:
+            count_el += count_rem
+            el += 1
+            count_rem = long(data[start+el])
+            data[start+el] = 0.0
+        count_rem -= (perm_count_el - count_el)
+        count_el = perm_count_el
+
+        data[start+el] += 1
+    # clean up tail elements
+    data[start+el+1:end] = 0.0
+
+
 cdef _subsample_without_replacement(cnp.ndarray[cnp.float64_t, ndim=1] data,
                                     cnp.ndarray[cnp.int32_t, ndim=1] indptr,
                                     cnp.int64_t n,
@@ -73,7 +150,7 @@ cdef _subsample_without_replacement(cnp.ndarray[cnp.float64_t, ndim=1] data,
     Returns
     -------
     ndarray
-        Subsampled data
+        Subsampled data in place
 
     Notes
     -----
@@ -81,56 +158,12 @@ cdef _subsample_without_replacement(cnp.ndarray[cnp.float64_t, ndim=1] data,
 
     """
     cdef:
-        cnp.int64_t counts_sum, count_el, perm_count_el
-        cnp.int64_t count_rem
-        cnp.ndarray[cnp.int64_t, ndim=1] permuted
-        Py_ssize_t i, idx
-        cnp.int32_t length,el,start,end
+        Py_ssize_t i
+        cnp.int32_t start,end
 
     for i in range(indptr.shape[0] - 1):
         start, end = indptr[i], indptr[i+1]
-        length = end - start
-        counts_sum = data[start:end].sum()
-        
-        if counts_sum < n:
-            data[start:end] = 0
-            continue
-
-        permuted = rng.choice(counts_sum, n, replace=False, shuffle=False)
-        permuted.sort()
-
-        # now need to do reverse mapping
-        # since I am not using np.repeat anymore
-        # reminder, old logic was
-        #   r = np.arange(length)
-        #   unpacked = np.repeat(r, data_i[start:end])
-        #   permuted_unpacked = rng.choice(unpacked, n, replace=False, shuffle=False)
-        # 
-        # specifically, what we're going to do here is randomly pick what elements within
-        # each sample to keep. this is analogous issuing the prior np.repeat call, and obtaining
-        # a random set of index positions for that resulting array. however, we do not need to
-        # perform the np.repeat call as we know the length of that resulting vector already,
-        # and additionally, we can compute the sample associated with an index in that array
-        # without constructing it.
-
-        el = 0         # index in result/data
-        count_el = 0  # index in permutted
-        count_rem = long(data[start])  # since each data has multiple els, sub count there
-        data[start] = 0.0
-        for idx in range(n):
-            perm_count_el = permuted[idx]
-            # the array is sorted, so just jump ahead
-            while (perm_count_el - count_el) >= count_rem:
-               count_el += count_rem
-               el += 1
-               count_rem = long(data[start+el])
-               data[start+el] = 0.0
-            count_rem -= (perm_count_el - count_el)
-            count_el = perm_count_el
-
-            data[start+el] += 1
-        # clean up tail elements
-        data[start+el+1:end] = 0.0
+        _subsample_slice_without_replacement(data, start, end, n, rng)
 
 
 cdef _subsample_fast(cnp.ndarray[cnp.float64_t, ndim=1] data,
